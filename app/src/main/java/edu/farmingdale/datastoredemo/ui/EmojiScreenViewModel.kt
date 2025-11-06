@@ -14,34 +14,48 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.combine
 
 
 class EmojiScreenViewModel(
     private val userPreferencesRepository: UserPreferencesRepository
 ) : ViewModel() {
-    // UI states access for various
+
+    // Puts layout choice and theme choice together in one box
+   // So the app knows both things at once
     val uiState: StateFlow<EmojiReleaseUiState> =
-        userPreferencesRepository.isLinearLayout.map { isLinearLayout ->
-            EmojiReleaseUiState(isLinearLayout)
-        }.stateIn(
-            scope = viewModelScope,
-            // Flow is set to emits value for when app is on the foreground
-            // 5 seconds stop delay is added to ensure it flows continuously
-            // for cases such as configuration change
-            started = SharingStarted.WhileSubscribed(5_000),
-            initialValue = EmojiReleaseUiState()
-        )
+        userPreferencesRepository.isLinearLayout
+            .combine(userPreferencesRepository.isDarkTheme) { isLinear, isDark ->
+                // Create UI state with both preferences
+                EmojiReleaseUiState(isLinearLayout = isLinear, isDarkTheme = isDark)
+            }
+            .stateIn(
+                scope = viewModelScope,
+                // Flow is set to emit values when app is in the foreground
+                // 5 second stop delay ensures it flows continuously
+                // for cases such as configuration changes
+                started = SharingStarted.WhileSubscribed(5_000),
+                initialValue = EmojiReleaseUiState()
+            )
 
     /*
-     * [selectLayout] change the layout and icons accordingly and
-     * save the selection in DataStore through [userPreferencesRepository]
-     */
+  * [selectLayout] change the layout and icons accordingly and
+  * save the selection in DataStore through [userPreferencesRepository]
+  */
     fun selectLayout(isLinearLayout: Boolean) {
         viewModelScope.launch {
             userPreferencesRepository.saveLayoutPreference(isLinearLayout)
         }
     }
 
+
+
+    // Toggles light and dark theme and saves to the data store
+    fun lDSwitch(isDarkTheme: Boolean) {
+        viewModelScope.launch {
+            userPreferencesRepository.saveThemePreference(isDarkTheme)
+        }
+    }
 
     companion object {
         val Factory: ViewModelProvider.Factory = viewModelFactory {
@@ -54,10 +68,12 @@ class EmojiScreenViewModel(
 }
 
 /*
- * Data class containing various UI States for Emoji Release screens
+ * Data class that holds all UI state for the Emoji screens
  */
 data class EmojiReleaseUiState(
     val isLinearLayout: Boolean = true,
+    // sets true to dark mode and false to light mode
+    val isDarkTheme: Boolean = false,
     val toggleContentDescription: Int =
         if (isLinearLayout) R.string.grid_layout_toggle else R.string.linear_layout_toggle,
     val toggleIcon: Int =
